@@ -660,4 +660,4 @@ src/org/eclipse/jdt/mcp/app/
   json/                             无额外依赖的 JSON 编解码
 ```
 
-实现计划和当前状态见：[docs/jdt-mcp-implementation-plan.md](../docs/jdt-mcp-implementation-plan.md)。
+
