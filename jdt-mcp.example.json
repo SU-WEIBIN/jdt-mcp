@@ -1,0 +1,14 @@
+{
+  "projectRoot": "C:/work/my-maven-project",
+  "cacheRoot": "C:/Users/your-name/.jdt-mcp/cache",
+  "decompileRoot": "C:/Users/your-name/.jdt-mcp/decompiled",
+  "mavenLocalRepository": "C:/Users/your-name/.m2/repository",
+  "additionalJars": [],
+  "activeProfiles": [],
+  "allowNetwork": false,
+  "includeTestSources": false,
+  "includeGeneratedSources": false,
+  "maxCallDepth": 8,
+  "maxResults": 100,
+  "maxResponseBytes": 1048576
+}

@@ -1,0 +1,23 @@
+build/
+target/
+.mvn/maven.config
+
+# The portable release launchers are source-controlled even though the parent
+# Eclipse repository ignores module-level bin directories by default.
+!bin/
+!bin/**
+dist/
+.env
+.env.*
+*.local
+*.secret
+*.secrets
+*.key
+*.pem
+*.p12
+*.jks
+*.log
+*.DS_Store
+Thumbs.db
+.idea/
+.vscode/
