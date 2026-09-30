@@ -176,6 +176,10 @@ Copy-Item -LiteralPath $jarFile -Destination (Join-Path $libPath 'jdt-mcp.jar') 
 Copy-Item -LiteralPath (Join-Path $moduleRoot 'jdt-mcp.example.json') -Destination (Join-Path $configPath 'jdt-mcp.example.json') -Force
 Copy-Item -LiteralPath (Join-Path $moduleRoot 'README.md') -Destination (Join-Path $stagePath 'README.md') -Force
 Copy-Item -LiteralPath (Join-Path $moduleRoot 'QUICKSTART.md') -Destination (Join-Path $stagePath 'QUICKSTART.md') -Force
+$observabilityDoc = Join-Path $moduleRoot 'OBSERVABILITY.md'
+if (Test-Path -LiteralPath $observabilityDoc -PathType Leaf) {
+    Copy-Item -LiteralPath $observabilityDoc -Destination (Join-Path $stagePath 'OBSERVABILITY.md') -Force
+}
 $licenseFile = Join-Path (Join-Path $moduleRoot '..') 'LICENSE'
 $noticeFile = Join-Path (Join-Path $moduleRoot '..') 'NOTICE'
 if (Test-Path -LiteralPath $licenseFile -PathType Leaf) {

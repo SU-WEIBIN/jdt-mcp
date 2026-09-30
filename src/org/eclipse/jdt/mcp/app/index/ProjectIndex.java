@@ -21,11 +21,19 @@ import java.util.stream.Collectors;
 
 import org.eclipse.jdt.mcp.app.json.JsonCodec;
 
-/** In-memory query index with a JSON snapshot for inspection and recovery. */
+/**
+ * 内存查询索引：以 id 保存某个范围的符号（项目源码或单个 JAR）和调用边，提供符号搜索、
+ * 按 id 查找、callers/callees/callsFrom 和调用链遍历等查询，并支持原子读写 JSON 快照以便
+ * 检查和恢复。
+ * In-memory query index with a JSON snapshot for inspection and recovery.
+ */
 public final class ProjectIndex {
     private final Map<String, IndexedSymbol> symbols = new LinkedHashMap<>();
     private final List<IndexedCall> calls = new ArrayList<>();
 
+    /**
+     * 添加符号；同一 id 已存在时优先保留带源码文件的版本。
+     */
     public synchronized void addSymbol(IndexedSymbol symbol) {
         IndexedSymbol previous = symbols.get(symbol.id());
         if (previous == null || (previous.file() == null && symbol.file() != null)) {
@@ -33,26 +41,44 @@ public final class ProjectIndex {
         }
     }
 
+    /**
+     * 追加一条调用边。
+     */
     public synchronized void addCall(IndexedCall call) {
         calls.add(call);
     }
 
+    /**
+     * 返回符号总数。
+     */
     public synchronized int symbolCount() {
         return symbols.size();
     }
 
+    /**
+     * 返回方法符号数量。
+     */
     public synchronized int methodCount() {
         return (int) symbols.values().stream().filter(symbol -> "METHOD".equals(symbol.kind())).count();
     }
 
+    /**
+     * 返回类型符号数量。
+     */
     public synchronized int typeCount() {
         return (int) symbols.values().stream().filter(symbol -> "TYPE".equals(symbol.kind())).count();
     }
 
+    /**
+     * 返回调用边数量。
+     */
     public synchronized int callCount() {
         return calls.size();
     }
 
+    /**
+     * 按来源（project/bytecode 等）和种类统计符号数量。
+     */
     public synchronized int symbolCount(String sourceKind, String kind) {
         return (int) symbols.values().stream()
                 .filter(symbol -> sourceKind == null || sourceKind.equals(symbol.sourceKind()))
@@ -60,6 +86,9 @@ public final class ProjectIndex {
                 .count();
     }
 
+    /**
+     * 按名称、限定名或签名做不区分大小写的模糊搜索，可限定符号种类。
+     */
     public synchronized List<IndexedSymbol> searchSymbols(String query, String kind, int maxResults) {
         String needle = query == null ? "" : query.toLowerCase(Locale.ROOT);
         Predicate<IndexedSymbol> kindFilter = kind == null || kind.isBlank()
@@ -75,22 +104,37 @@ public final class ProjectIndex {
                 .toList();
     }
 
+    /**
+     * searchSymbols 的别名，兼容旧调用。
+     */
     public synchronized List<IndexedSymbol> findSymbols(String query, String kind, int maxResults) {
         return searchSymbols(query, kind, maxResults);
     }
 
+    /**
+     * 按稳定 id 查找符号。
+     */
     public synchronized IndexedSymbol symbol(String id) {
         return symbols.get(id);
     }
 
+    /**
+     * 返回全部符号的不可变副本。
+     */
     public synchronized List<IndexedSymbol> symbols() {
         return List.copyOf(symbols.values());
     }
 
+    /**
+     * 返回全部调用边的不可变副本。
+     */
     public synchronized List<IndexedCall> calls() {
         return List.copyOf(calls);
     }
 
+    /**
+     * 按目标 id 或目标签名查询调用者。
+     */
     public synchronized List<IndexedCall> callers(String targetId, String targetQuery, int maxResults) {
         String needle = lower(targetQuery);
         return calls.stream()
@@ -100,6 +144,9 @@ public final class ProjectIndex {
                 .toList();
     }
 
+    /**
+     * 按调用者 id 查询其直接被调方法。
+     */
     public synchronized List<IndexedCall> callees(String callerId, int maxResults) {
         return calls.stream()
                 .filter(call -> callerId.equals(call.callerId()))
@@ -124,6 +171,9 @@ public final class ProjectIndex {
                 .toList();
     }
 
+    /**
+     * 从起始符号做广度优先调用链遍历，限制深度和结果数。
+     */
     public synchronized List<Map<String, Object>> trace(String startId, int maxDepth, int maxResults) {
         if (startId == null || startId.isBlank()) {
             return List.of();
@@ -313,14 +363,23 @@ public final class ProjectIndex {
         }
     }
 
+    /**
+     * 不区分大小写的子串包含判断。
+     */
     private static boolean contains(String value, String needle) {
         return value != null && value.toLowerCase(Locale.ROOT).contains(needle);
     }
 
+    /**
+     * null 安全的字符串转小写。
+     */
     private static String lower(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT);
     }
 
+    /**
+     * 调用链遍历的待扩展节点：当前符号、深度以及从起点到这里的路径。
+     */
     private record TraceNode(String symbolId, int depth, List<String> path) {
     }
 }

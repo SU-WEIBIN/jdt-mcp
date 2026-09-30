@@ -16,6 +16,11 @@ import org.eclipse.jdt.mcp.app.index.ProjectIndex;
 import org.eclipse.jdt.mcp.app.maven.MavenArtifact;
 import org.eclipse.jdt.mcp.app.maven.MavenProjectModel;
 
+/**
+ * 单个 Maven 项目的运行期状态中枢：持有配置、各类缓存路径、生命周期状态、Maven 模型、
+ * 内存中的源码索引、落盘的字节码索引存储、索引告警和反编译存储。对外提供跨源码/字节码
+ * 的统一符号与调用查询，并生成 project_info、index_status 等 MCP 响应数据。
+ */
 public final class ProjectContext {
     private final McpConfig config;
     private final Path projectRoot;
@@ -46,7 +51,8 @@ public final class ProjectContext {
         this.workspaceRoot = projectCacheRoot.resolve("workspace");
         this.indexRoot = projectCacheRoot.resolve("index");
         this.metadataRoot = projectCacheRoot.resolve("metadata");
-        this.bytecodeIndex = new BytecodeIndexStore(indexRoot.resolve("bytecode"), projectId, List.of());
+        this.bytecodeIndex = new BytecodeIndexStore(indexRoot.resolve("bytecode"), projectId, List.of(),
+                config.maxResidentIndexBytes());
         this.decompiledArtifacts = new DecompiledArtifactStore(config.decompileRoot());
     }
 
@@ -149,13 +155,13 @@ public final class ProjectContext {
     public void mavenProject(MavenProjectModel mavenProject) {
         this.mavenProject = mavenProject;
         this.bytecodeIndex = new BytecodeIndexStore(indexRoot.resolve("bytecode"), projectId,
-                mavenProject == null ? List.of() : mavenProject.artifacts());
+                mavenProject == null ? List.of() : mavenProject.artifacts(), config.maxResidentIndexBytes());
         this.state = ProjectState.MAVEN_LOADED;
     }
 
     /**
      * Returns the current in-memory project source index. Bytecode indexes are
-     * kept in the disk-backed store returned by {@link #bytecodeIndex()}.
+     * persisted on disk and served from the resident cache in {@link #bytecodeIndex()}.
      *
      * @return current index
      */
@@ -164,7 +170,7 @@ public final class ProjectContext {
     }
 
     /**
-     * Returns the disk-backed bytecode index catalog.
+     * Returns the persisted bytecode index catalog with a resident query cache.
      *
      * @return bytecode index store
      */
@@ -256,9 +262,8 @@ public final class ProjectContext {
      * artifact index. The request is skipped while startup indexing is active.
      */
     public void requestMemoryCleanup() {
-        if (state != ProjectState.INDEXING) {
-            System.gc();
-        }
+        // Resident query indexes are intentionally retained. Let the JVM manage
+        // temporary allocations instead of forcing a full collection per query.
     }
 
     /**
@@ -323,6 +328,9 @@ public final class ProjectContext {
         result.put("workspaceRoot", workspaceRoot.toString());
         result.put("indexRoot", indexRoot.toString());
         result.put("decompileRoot", config.decompileRoot().toString());
+        result.put("maxResidentIndexBytes", config.maxResidentIndexBytes());
+        result.put("residentArtifacts", bytecodeIndex.residentArtifactCount());
+        result.put("residentBytes", bytecodeIndex.residentBytes());
         result.put("mavenLocalRepository", config.mavenLocalRepository().toString());
         result.put("additionalJars", config.additionalJars().stream().map(Path::toString).toList());
         result.put("activeProfiles", config.activeProfiles());
@@ -352,6 +360,12 @@ public final class ProjectContext {
         result.put("indexedClasses", index.typeCount() + bytecodeIndex.typeCount());
         result.put("indexedMethods", index.methodCount() + bytecodeIndex.methodCount());
         result.put("callEdges", index.callCount() + bytecodeIndex.callCount());
+        result.put("residentArtifacts", bytecodeIndex.residentArtifactCount());
+        result.put("residentBytes", bytecodeIndex.residentBytes());
+        result.put("residentLimitBytes", bytecodeIndex.residentLimitBytes());
+        result.put("snapshotLoadCount", bytecodeIndex.snapshotLoadCount());
+        result.put("snapshotLoadBytes", bytecodeIndex.snapshotLoadBytes());
+        result.put("residentCacheHitCount", bytecodeIndex.residentCacheHitCount());
         result.put("projectClasses", index.symbolCount("project", "TYPE"));
         result.put("projectMethods", index.symbolCount("project", "METHOD"));
         result.put("bytecodeClasses", bytecodeIndex.typeCount());

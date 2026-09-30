@@ -4,7 +4,11 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** A stable, protocol-facing description of a Java type or method. */
+/**
+ * 一个 Java 类型或方法符号的稳定描述：包含对协议暴露的 id、种类、名称、签名、来源
+ * （源码/字节码）、所属模块、文件位置和行号范围等，可序列化为 MCP 响应或持久化快照。
+ * A stable, protocol-facing description of a Java type or method.
+ */
 public record IndexedSymbol(
         String id,
         String kind,

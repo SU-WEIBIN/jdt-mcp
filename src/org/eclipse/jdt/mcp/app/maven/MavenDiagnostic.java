@@ -4,7 +4,11 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Describes a Maven model or artifact-resolution issue without losing its cause. */
+/**
+ * 一条 Maven 模型或依赖解析诊断：包含严重级别、类别、消息、相关坐标和文件路径，
+ * 并支持格式化为告警文本或序列化为元数据。
+ * Describes a Maven model or artifact-resolution issue without losing its cause.
+ */
 public record MavenDiagnostic(
         Severity severity,
         Kind kind,
@@ -54,14 +58,20 @@ public record MavenDiagnostic(
         return result;
     }
 
-    /** Diagnostic severity used for resolution-state grading. */
+    /**
+     * 诊断严重级别，用于推导 Maven 解析状态（INFO/WARNING/ERROR）。
+     * Diagnostic severity used for resolution-state grading.
+     */
     public enum Severity {
         INFO,
         WARNING,
         ERROR
     }
 
-    /** Categories that distinguish model errors from missing local files. */
+    /**
+     * 诊断类别，用于区分模型错误与本地文件缺失等具体原因。
+     * Categories that distinguish model errors from missing local files.
+     */
     public enum Kind {
         PARENT_NOT_FOUND,
         PARENT_MISMATCH,

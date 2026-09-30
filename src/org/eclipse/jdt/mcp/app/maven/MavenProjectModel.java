@@ -5,6 +5,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Maven 加载结果：项目根、模块列表、已解析/未解析构件、告警和结构化诊断，并提供
+ * 解析状态（READY/DEGRADED/FAILED）、诊断汇总与序列化。
+ */
 public record MavenProjectModel(
         Path root,
         List<MavenModule> modules,

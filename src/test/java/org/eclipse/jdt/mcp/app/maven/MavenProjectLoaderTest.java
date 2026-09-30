@@ -10,7 +10,11 @@ import java.util.stream.Stream;
 
 import junit.framework.TestCase;
 
-/** Regression tests for the local effective-POM Maven loader. */
+/**
+ * {@link MavenProjectLoader} 的回归测试：覆盖父 POM 继承、BOM 导入、systemPath 插值、
+ * profile、排除项和传递依赖版本仲裁等有效 POM 特性。
+ * Regression tests for the local effective-POM Maven loader.
+ */
 public final class MavenProjectLoaderTest extends TestCase {
 
     /**

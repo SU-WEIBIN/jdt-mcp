@@ -21,6 +21,12 @@ import org.eclipse.jdt.mcp.app.index.SourceIndexStore;
 import org.eclipse.jdt.mcp.app.maven.MavenProjectLoader;
 import org.eclipse.jdt.mcp.app.maven.MavenProjectModel;
 
+/**
+ * 项目打开与索引编排：校验项目目录和 pom.xml，准备缓存目录，调用
+ * {@link MavenProjectLoader} 加载 Maven 模型并补充额外 JAR，构造
+ * {@link ProjectContext}，然后在守护线程中恢复/重建源码索引与字节码索引，并持久化
+ * 项目元数据和构件指纹。
+ */
 public final class ProjectManager {
 
     /**
@@ -78,6 +84,10 @@ public final class ProjectManager {
             BytecodeIndexStore bytecodeStore = context.bytecodeIndex();
             BytecodeIndexStore.RestoreResult bytecodeRestore = bytecodeStore.restore(fingerprints);
             warnings.addAll(bytecodeRestore.warnings());
+            // Warm reusable snapshots before source analysis so an early MCP
+            // query does not fall back to disk-backed artifact loading.
+            BytecodeIndexStore.PreloadResult restoredPreload = bytecodeStore.preload();
+            warnings.addAll(restoredPreload.warnings());
             if (bytecodeRestore.reusedArtifactCount() > 0) {
                 warnings.add("[INFO/bytecode-cache] Reused " + bytecodeRestore.reusedArtifactCount()
                         + " of " + bytecodeRestore.currentArtifactCount() + " artifact indexes");
@@ -114,6 +124,13 @@ public final class ProjectManager {
                     ProjectIndex artifactIndex = new ProjectIndex();
                     JarBytecodeIndexer.Result result = bytecodeIndexer.index(artifact, artifactIndex);
                     bytecodeStore.save(artifact, artifactIndex, result, fingerprints.get(artifact.coordinate()));
+                    try {
+                        // Persist a checkpoint after each completed artifact so a
+                        // process interruption cannot discard all prior progress.
+                        bytecodeStore.commit();
+                    } catch (IOException exception) {
+                        warnings.add("Could not checkpoint bytecode index manifest: " + exception.getMessage());
+                    }
                     if (result.warning() != null) {
                         warnings.add(result.coordinate() + ": " + result.warning());
                     }
@@ -125,6 +142,12 @@ public final class ProjectManager {
                 bytecodeStore.commit();
             } catch (IOException exception) {
                 warnings.add("Could not save bytecode index manifest: " + exception.getMessage());
+            }
+            BytecodeIndexStore.PreloadResult preload = bytecodeStore.preload();
+            warnings.addAll(preload.warnings());
+            if (preload.eligibleArtifactCount() > 0) {
+                warnings.add("[INFO/bytecode-cache] Resident " + preload.residentArtifactCount()
+                        + " of " + preload.eligibleArtifactCount() + " artifact indexes");
             }
             context.index(sourceIndex, warnings);
             try {
@@ -164,7 +187,7 @@ public final class ProjectManager {
                 continue;
             }
             try {
-                result.put(artifact.coordinate(), JarFingerprint.calculate(artifact.file()));
+                result.put(artifact.coordinate(), JarFingerprint.metadata(artifact.file()));
             } catch (IOException exception) {
                 warnings.add("Could not fingerprint artifact " + artifact.coordinate() + ": "
                         + exception.getMessage());
@@ -179,7 +202,8 @@ public final class ProjectManager {
      * long-running MCP process.
      */
     private static void requestPostIndexCollection() {
-        System.gc();
+        // Resident indexes are intentionally retained; avoid forcing a full GC
+        // immediately after indexing and let the JVM collect temporary objects.
     }
 
     /**
@@ -202,20 +226,20 @@ public final class ProjectManager {
                 continue;
             }
             try {
-                String hash = JarFingerprint.calculate(jar).sha256();
+                String pathIdentity = JarFingerprint.pathIdentity(jar);
                 String artifactId = jar.getFileName().toString().replaceFirst("\\.[^.]+$", "");
                 artifacts.add(new org.eclipse.jdt.mcp.app.maven.MavenArtifact(
                         "external",
                         artifactId,
-                        hash.substring(0, 16),
+                        pathIdentity,
                         "compile",
                         null,
                         jar,
                         null,
                         true,
                         false));
-            } catch (java.io.IOException exception) {
-                warnings.add("Could not fingerprint additional JAR " + jar + ": " + exception.getMessage());
+            } catch (RuntimeException exception) {
+                warnings.add("Could not identify additional JAR " + jar + ": " + exception.getMessage());
             }
         }
         return new MavenProjectModel(project.root(), project.modules(), java.util.List.copyOf(artifacts),

@@ -10,5 +10,6 @@
   "includeGeneratedSources": false,
   "maxCallDepth": 8,
   "maxResults": 100,
-  "maxResponseBytes": 1048576
+  "maxResponseBytes": 1048576,
+  "maxResidentIndexBytes": 1610612736
 }

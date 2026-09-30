@@ -14,6 +14,11 @@ import org.eclipse.jdt.mcp.app.decompiler.JarFingerprint;
 import org.eclipse.jdt.mcp.app.json.JsonCodec;
 import org.eclipse.jdt.mcp.app.maven.MavenArtifact;
 
+/**
+ * 把项目依赖清单写入 {@code metadata/artifacts.json}：为每个 Maven 构件记录坐标、
+ * 文件位置以及 SHA-256、大小、修改时间指纹。若调用方已在校验缓存时算过指纹则直接
+ * 复用，避免重复读取 JAR。
+ */
 public final class ArtifactMetadataStore {
 
     /**

@@ -5,6 +5,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * 运行期不可变配置：保存项目根目录、缓存/反编译目录、Maven 本地仓库、额外 JAR、
+ * 激活的 profile，以及网络访问、测试/生成源码开关和调用深度、结果数、响应大小、
+ * 常驻索引内存上限等限制，并支持从 JSON 值映射构建与校验。
+ */
 public record McpConfig(
         Path projectRoot,
         Path cacheRoot,
@@ -17,7 +22,8 @@ public record McpConfig(
         boolean includeGeneratedSources,
         int maxCallDepth,
         int maxResults,
-        int maxResponseBytes) {
+        int maxResponseBytes,
+        long maxResidentIndexBytes) {
 
     /**
      * Creates the default MCP configuration.
@@ -40,7 +46,8 @@ public record McpConfig(
                 false,
                 8,
                 100,
-                1024 * 1024);
+                1024 * 1024,
+                1536L * 1024L * 1024L);
     }
 
     /**
@@ -53,7 +60,7 @@ public record McpConfig(
         return new McpConfig(root, cacheRoot, decompileRoot, mavenLocalRepository,
                 additionalJars, activeProfiles,
                 allowNetwork, includeTestSources, includeGeneratedSources,
-                maxCallDepth, maxResults, maxResponseBytes);
+                maxCallDepth, maxResults, maxResponseBytes, maxResidentIndexBytes);
     }
 
     /**
@@ -66,6 +73,9 @@ public record McpConfig(
         Objects.requireNonNull(mavenLocalRepository, "mavenLocalRepository is required");
         if (maxCallDepth < 1 || maxResults < 1 || maxResponseBytes < 1024) {
             throw new IllegalArgumentException("Call depth, result count and response size must be positive");
+        }
+        if (maxResidentIndexBytes < 0) {
+            throw new IllegalArgumentException("maxResidentIndexBytes must not be negative");
         }
     }
 
@@ -94,7 +104,8 @@ public record McpConfig(
                 bool(values, "includeGeneratedSources", defaults.includeGeneratedSources()),
                 integer(values, "maxCallDepth", defaults.maxCallDepth()),
                 integer(values, "maxResults", defaults.maxResults()),
-                integer(values, "maxResponseBytes", defaults.maxResponseBytes()));
+                integer(values, "maxResponseBytes", defaults.maxResponseBytes()),
+                longValue(values, "maxResidentIndexBytes", defaults.maxResidentIndexBytes()));
     }
 
     /**
@@ -184,7 +195,26 @@ public record McpConfig(
     }
 
     /**
-     * Parses an array of profile identifiers.
+     * Parses one long-valued configuration property.
+     *
+     * @param values configuration values
+     * @param name property name
+     * @param fallback default value
+     * @return parsed long value
+     */
+    private static long longValue(Map<String, Object> values, String name, long fallback) {
+        Object value = values.get(name);
+        if (value == null) {
+            return fallback;
+        }
+        if (!(value instanceof Number)) {
+            throw new IllegalArgumentException(name + " must be a number");
+        }
+        return ((Number) value).longValue();
+    }
+
+    /**
+     * Parses an array of non-blank profile identifiers.
      *
      * @param values configuration values
      * @param name property name

@@ -8,9 +8,13 @@ import org.eclipse.jdt.mcp.app.config.ConfigLoader;
 import org.eclipse.jdt.mcp.app.config.McpConfig;
 import org.eclipse.jdt.mcp.app.core.ProjectContext;
 import org.eclipse.jdt.mcp.app.core.ProjectManager;
+import org.eclipse.jdt.mcp.app.observability.McpLogger;
 import org.eclipse.jdt.mcp.app.server.McpStdioServer;
 
 /**
+ * 程序命令行入口：解析 {@code --project/--config/--help/--version} 参数，加载配置并
+ * 打开 Maven 项目，然后启动 {@link McpStdioServer} 通过标准输入输出处理 MCP 请求。
+ * 启动失败时写入启动日志并以退出码 2 结束进程。
  * Command-line entry point for the JDT MCP stdio server.
  */
 public final class Main {
@@ -28,6 +32,8 @@ public final class Main {
      * @param args command-line options
      */
     public static void main(String[] args) {
+        long started = System.nanoTime();
+        McpLogger bootstrapLogger = new McpLogger(System.err);
         try {
             Map<String, String> options = parseArguments(args);
             if (options.containsKey("help")) {
@@ -42,10 +48,20 @@ public final class Main {
             Path configFile = pathOption(options, "config");
             McpConfig config = ConfigLoader.load(configFile, projectOverride);
             ProjectContext project = new ProjectManager().open(config);
-            System.err.println("jdt-mcp bootstrap ready for " + project.projectRoot());
-            new McpStdioServer(project, System.in, System.out, System.err).run();
+            Path logFile = project.projectCacheRoot().resolve("logs").resolve("jdt-mcp.jsonl");
+            try (McpLogger logger = McpLogger.open(System.err, logFile)) {
+                logger.info("server.bootstrap_ready", Map.of(
+                        "projectId", project.projectId(),
+                        "projectRoot", project.projectRoot().toString(),
+                        "logFile", logFile.toString(),
+                        "startupMs", (System.nanoTime() - started) / 1_000_000.0));
+                new McpStdioServer(project, System.in, System.out, logger).run();
+            }
         } catch (Exception exception) {
-            System.err.println("jdt-mcp failed to start: " + exception.getMessage());
+            bootstrapLogger.error("server.startup_failed", Map.of(
+                    "message", message(exception),
+                    "exceptionClass", exception.getClass().getName(),
+                    "startupMs", (System.nanoTime() - started) / 1_000_000.0));
             System.exit(2);
         }
     }
@@ -94,6 +110,17 @@ public final class Main {
     private static Path pathOption(Map<String, String> options, String name) {
         String value = options.get(name);
         return value == null ? null : Path.of(value);
+    }
+
+    /**
+     * 提取异常消息；消息为空或空白时退化为异常类简单名。
+     *
+     * @param exception 异常
+     * @return 可用于日志的消息
+     */
+    private static String message(Throwable exception) {
+        String message = exception.getMessage();
+        return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
     }
 
     /**

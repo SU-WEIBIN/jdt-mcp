@@ -24,7 +24,11 @@ import org.eclipse.jdt.mcp.app.maven.MavenArtifact;
 import org.eclipse.jdt.mcp.app.maven.MavenModule;
 import org.eclipse.jdt.mcp.app.maven.MavenProjectModel;
 
-/** Persists and validates the project-source index independently of bytecode snapshots. */
+/**
+ * 源码索引清单存储：为源码索引计算并保存一份覆盖源码文件、类路径和依赖构件的输入指纹，
+ * 据此判断已有的 source-index.json 能否复用；不能复用时返回需要重建的结果。
+ * Persists and validates the project-source index independently of bytecode snapshots.
+ */
 public final class SourceIndexStore {
     private static final int FORMAT_VERSION = 1;
     private static final int INPUT_FORMAT_VERSION = 1;
@@ -358,6 +362,8 @@ public final class SourceIndexStore {
     }
 
     /**
+     * 源码快照恢复结果：可复用的索引（需要重建时为 null）、源文件/源码根数量、告警、
+     * 当前输入指纹以及是否成功复用。
      * Reports the result of a source snapshot restoration attempt.
      *
      * @param index restored source index, or {@code null} when rebuilding

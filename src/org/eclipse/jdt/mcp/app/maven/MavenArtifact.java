@@ -5,6 +5,10 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * 一个 Maven 构件的不可变描述：坐标（groupId/artifactId/version/classifier）、作用域、JAR 或
+ * classes 目录、是否已解析、是否属于 reactor，以及传递依赖排除项，并提供 coordinate() 与序列化。
+ */
 public record MavenArtifact(
         String groupId,
         String artifactId,

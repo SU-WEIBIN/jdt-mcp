@@ -9,11 +9,22 @@ import java.util.Map;
 
 import org.eclipse.jdt.mcp.app.json.JsonCodec;
 
+/**
+ * 配置加载工具：读取可选的 JSON 配置文件，把其中的键值交给
+ * {@link McpConfig#fromMap} 解析并应用项目路径覆盖，最后调用
+ * {@link McpConfig#validate()} 校验。相对路径以配置文件所在目录为基准。
+ */
 public final class ConfigLoader {
 
+    /**
+     * 工具类，禁止实例化。
+     */
     private ConfigLoader() {
     }
 
+    /**
+     * 加载配置：读取 JSON 文件（可为 null），以文件所在目录解析相对路径，再应用项目路径覆盖并校验。
+     */
     public static McpConfig load(Path configFile, Path projectOverride) throws IOException {
         Map<String, Object> values = new LinkedHashMap<>();
         Path baseDirectory = Path.of(".").toAbsolutePath().normalize();

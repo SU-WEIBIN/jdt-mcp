@@ -536,7 +536,7 @@ $cp = (Join-Path (Get-Location) 'target/classes') + [IO.Path]::PathSeparator + (
 
 ## 配置文件
 
-完整示例见：[jdt-mcp.example.json](./jdt-mcp.example.json)。
+完整示例见：[jdt-mcp.example.json](./jdt-mcp.example.json)。配置文件是标准 JSON，不支持 `//` 或 `/* ... */` 注释。
 
 ```json
 {
@@ -547,34 +547,116 @@ $cp = (Join-Path (Get-Location) 'target/classes') + [IO.Path]::PathSeparator + (
   "additionalJars": [
     "C:/vendor/lib/vendor-api.jar"
   ],
-  "activeProfiles": [],
+  "activeProfiles": [
+    "dev"
+  ],
   "allowNetwork": false,
   "includeTestSources": false,
   "includeGeneratedSources": false,
   "maxCallDepth": 8,
   "maxResults": 100,
-  "maxResponseBytes": 1048576
+  "maxResponseBytes": 1048576,
+  "maxResidentIndexBytes": 1610612736
 }
 ```
 
-配置文件中的相对路径相对于配置文件所在目录解析。命令行 `--project` 优先于配置文件中的 `projectRoot`。
+### 配置加载规则
 
-| 配置项 | 说明 |
-| --- | --- |
-| `projectRoot` | Maven 项目根目录。可以由 `--project` 覆盖。 |
-| `cacheRoot` | 项目 workspace、索引和 metadata 的根目录。 |
-| `decompileRoot` | 反编译结果根目录。服务不会自动删除其中的文件。 |
-| `mavenLocalRepository` | Maven 本地仓库目录。 |
-| `additionalJars` | 需要分析但不在 Maven 依赖树中的本地 JAR 列表。 |
-| `activeProfiles` | 显式激活的 Maven profile ID 列表。 |
-| `allowNetwork` | 当前版本不主动下载依赖；该项为后续 Resolver 接入预留。 |
-| `includeTestSources` | 当前实现仍以 main 源码为主；默认不分析测试源码。 |
-| `includeGeneratedSources` | 当前默认不分析 generated sources。 |
-| `maxCallDepth` | 调用链默认最大深度，默认 `8`。 |
-| `maxResults` | 查询默认最大结果数，默认 `100`。 |
-| `maxResponseBytes` | 代码文本响应的默认大小限制，默认 `1048576`。 |
+- 配置文件中的相对路径相对于配置文件所在目录解析，不相对于当前 shell 目录解析。
+- Windows 路径可以使用 `/`，或者将反斜杠写成 `\\`。
+- 命令行 `--project` 优先于配置文件中的 `projectRoot`。
+- `--config` 只负责指定配置文件，不会自动改变项目目录；项目目录来自 `projectRoot` 或 `--project`。
+- 未列出的 JSON 字段当前不会改变服务行为，不要依赖未实现的配置项。
+- 修改配置后必须重启 MCP 进程，服务不会热加载配置。
+
+### 配置项
+
+| 配置项 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `projectRoot` | 字符串路径 | 无 | Maven 项目根目录，必须包含 `pom.xml`。可由 `--project` 覆盖。 |
+| `cacheRoot` | 字符串路径 | `%USERPROFILE%/.jdt-mcp/cache` | 项目 workspace、源码索引、JAR 索引、manifest、metadata 和日志的根目录。 |
+| `decompileRoot` | 字符串路径 | `%USERPROFILE%/.jdt-mcp/decompiled` | JAR 按需反编译结果根目录，服务不会自动清理。 |
+| `mavenLocalRepository` | 字符串路径 | `%USERPROFILE%/.m2/repository` | Maven 本地仓库根目录，不是 Maven 可执行文件目录，也不是 `settings.xml` 路径。 |
+| `additionalJars` | 字符串数组 | `[]` | 不在 Maven 依赖树中的本地 JAR 列表；不存在的文件只产生 warning，不会自动下载。 |
+| `activeProfiles` | 字符串数组 | `[]` | 显式激活的 Maven profile ID 列表，例如 `["dev", "windows"]`。 |
+| `allowNetwork` | 布尔值 | `false` | 当前版本不执行远程下载，此字段为后续 Resolver 接入预留；设为 `true` 也不会自动补齐依赖。 |
+| `includeTestSources` | 布尔值 | `false` | 当前实现仍以 main 源码为主；该字段会影响源码缓存输入指纹，但不代表测试源码一定会被索引。 |
+| `includeGeneratedSources` | 布尔值 | `false` | 当前实现不会自动扫描全部 generated sources；该字段会影响源码缓存输入指纹。 |
+| `maxCallDepth` | 整数 | `8` | `trace_call_chain` 的默认最大深度，必须大于等于 `1`。 |
+| `maxResults` | 整数 | `100` | 查询工具的默认最大返回条数，必须大于等于 `1`；工具入参可以单次覆盖。 |
+| `maxResponseBytes` | 整数 | `1048576` | 单次工具结果的默认最大字节数，默认 1 MiB，必须至少为 `1024`。 |
+| `maxResidentIndexBytes` | 整数 | `1610612736` | JAR 字节码快照常驻 JVM 内存的近似上限，单位为字节，默认 1.5 GiB。设置为 `0` 关闭常驻缓存，但仍保留磁盘快照。 |
+
+### Maven 本地仓库配置
+
+`mavenLocalRepository` 必须指向 Maven 本地仓库根目录，例如：
+
+```json
+{
+  "mavenLocalRepository": "E:/maven/apache-maven-3.6.3/repository"
+}
+```
+
+目录应类似：
+
+```text
+E:/maven/apache-maven-3.6.3/repository/
+├── com/
+│   └── example/
+│       └── demo-api/
+│           └── 1.0.0/
+│               ├── demo-api-1.0.0.jar
+│               └── demo-api-1.0.0.pom
+└── org/
+    └── springframework/
+```
+
+当前 Maven loader 会读取本地 POM/JAR，解析 parent、BOM、dependencyManagement、profile、exclusion 和传递依赖，但不会：
+
+- 读取 Maven 可执行文件路径作为仓库；
+- 通过 `settings.xml` 自动推导另一个仓库；
+- 执行 `mvn dependency:resolve`；
+- 访问远程仓库或自动下载缺失依赖。
+
+如果 `index_status` 中出现 `MISSING_JAR`、`MISSING_POM`、`UNRESOLVED_PROPERTY` 或 `VERSION_CONFLICT`，优先检查此路径、POM 版本和本地仓库内容。
+
+### 额外 JAR 配置
+
+```json
+{
+  "additionalJars": [
+    "F:/workItem/XGD/libs/api-all-1.0.1.jar",
+    "F:/workItem/XGD/libs/custom-platform-api.jar"
+  ]
+}
+```
+
+额外 JAR 会作为外部 artifact 加入字节码索引。它没有标准 Maven 坐标，内部标识由文件路径和文件名生成；JAR 不存在时不会自动下载。
+
+### JAR 指纹开关说明
+
+当前版本没有 `enableJarFingerprint`、`useJarFingerprint` 等 JAR 指纹开关。JAR 指纹校验是缓存复用机制的一部分，默认启用且不能通过配置文件关闭。下面的配置不会生效：
+
+```json
+{
+  "enableJarFingerprint": false
+}
+```
+
+当前指纹策略分为两级：
+
+1. 启动时优先读取文件大小和最后修改时间，避免每次启动都完整读取大型 JAR。
+2. 元数据变化且存在旧快照时，再计算 SHA-256，确认快照能否复用。
+3. 指纹不匹配、快照缺失或 manifest 无效时，重新建立对应 JAR 的索引。
+4. 反编译结果按 JAR 内容指纹持久化，服务重启后可复用。
+
+因此，JAR 指纹与 `maxResidentIndexBytes` 是两个不同概念：前者决定磁盘索引是否复用，后者决定索引是否常驻 JVM 内存。
+
+如果需要强制重建某个项目的索引，应停止 MCP 后删除该项目 `cacheRoot/<project-id>/` 下的 `index`、`metadata` 和 `workspace`，不要添加一个未实现的指纹开关。
 
 ## 索引、内存和增量复用
+
+Bytecode snapshots are preloaded into a bounded resident cache before the project becomes ready; searches reuse that cache instead of rereading JSON snapshots for every request.
 
 当前索引分成两类：
 
@@ -661,3 +743,10 @@ src/org/eclipse/jdt/mcp/app/
 ```
 
 
+
+
+## Observability
+
+The service writes structured JSONL request logs to `stderr` and persists them at `logs/jdt-mcp.jsonl` below each project cache directory. Logs include MCP method/tool, request ID, response duration, response size, JVM memory deltas, and resident-cache versus persisted-snapshot access.
+
+Use the `runtime_status` tool to inspect JVM memory, resident cache, filesystem capacity, and cumulative per-tool timings. See [`OBSERVABILITY.md`](OBSERVABILITY.md) for the field definitions and storage semantics.

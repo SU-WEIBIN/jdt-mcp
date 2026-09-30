@@ -27,7 +27,9 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 /**
- * Builds the Maven project model needed by the headless JDT indexer.
+ * 不依赖 Maven 插件、仅使用本地仓库的 Maven 项目加载器：在解析依赖前先构建有效 POM
+ * （父 POM 继承、BOM 导入、profile 激活、属性插值、依赖管理与排除），发现 reactor
+ * 模块并做确定性版本仲裁，最终产出项目模型与诊断信息。
  *
  * <p>The loader deliberately remains plugin-free and local-repository based,
  * but it now builds an effective POM view before resolving artifacts. This
@@ -1624,6 +1626,7 @@ public final class MavenProjectLoader {
     }
 
     /**
+     * 不可变的依赖声明：坐标、作用域、类型、classifier、systemPath 和排除项。
      * Immutable dependency declaration.
      *
      * @param groupId group identifier
@@ -1674,6 +1677,7 @@ public final class MavenProjectLoader {
     }
 
     /**
+     * 不可变的依赖管理声明：坐标、版本、作用域和类型，可表示 BOM 导入。
      * Immutable dependency-management declaration.
      *
      * @param groupId group identifier
@@ -1719,6 +1723,8 @@ public final class MavenProjectLoader {
     }
 
     /**
+     * 有效 POM 状态：合并父 POM、profile 和属性后的坐标、打包方式、源码/输出目录、
+     * 依赖管理、依赖和子模块目录，供模块与依赖处理使用。
      * Effective POM state used by module and dependency processing.
      */
     private static final class EffectivePom {
@@ -1800,6 +1806,7 @@ public final class MavenProjectLoader {
     }
 
     /**
+     * 有效源码根与输出目录的组合。
      * Effective source/output directory pair.
      *
      * @param sourceDirectories source roots
@@ -1809,6 +1816,7 @@ public final class MavenProjectLoader {
     }
 
     /**
+     * 依赖遍历队列中的一个待展开节点：构件、深度和沿该路径继承的排除集合。
      * A dependency path waiting for transitive expansion.
      *
      * @param artifact dependency artifact
@@ -1819,6 +1827,7 @@ public final class MavenProjectLoader {
     }
 
     /**
+     * 版本仲裁选中的构件及其选择依据：依赖深度和稳定的声明顺序。
      * Mediated artifact and the path information that selected it.
      *
      * @param artifact selected artifact
