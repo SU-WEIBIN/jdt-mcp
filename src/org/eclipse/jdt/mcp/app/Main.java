@@ -47,9 +47,9 @@ public final class Main {
             Path projectOverride = pathOption(options, "project");
             Path configFile = pathOption(options, "config");
             McpConfig config = ConfigLoader.load(configFile, projectOverride);
-            ProjectContext project = new ProjectManager().open(config);
-            Path logFile = project.projectCacheRoot().resolve("logs").resolve("jdt-mcp.jsonl");
+            Path logFile = ProjectManager.projectCacheRoot(config).resolve("logs").resolve("jdt-mcp.jsonl");
             try (McpLogger logger = McpLogger.open(System.err, logFile)) {
+                ProjectContext project = new ProjectManager().open(config, logger);
                 logger.info("server.bootstrap_ready", Map.of(
                         "projectId", project.projectId(),
                         "projectRoot", project.projectRoot().toString(),

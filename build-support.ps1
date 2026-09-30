@@ -213,3 +213,38 @@ function Initialize-ProjectJavaEnvironment {
         Maven = $mavenPath
     }
 }
+
+# Splits JDT_MCP_JVM_OPTIONS into individual JVM arguments while honoring
+# single and double quoted values. Returns an empty array when unset.
+function ConvertFrom-JvmOptions {
+    param([string]$Options)
+
+    $result = New-Object System.Collections.Generic.List[string]
+    if ([string]::IsNullOrWhiteSpace($Options)) {
+        return $result.ToArray()
+    }
+    $current = New-Object System.Text.StringBuilder
+    $quote = [char]0
+    foreach ($character in $Options.ToCharArray()) {
+        if ($quote -ne [char]0) {
+            if ($character -eq $quote) {
+                $quote = [char]0
+            } else {
+                [void]$current.Append($character)
+            }
+        } elseif ($character -eq '"' -or $character -eq "'") {
+            $quote = $character
+        } elseif ([char]::IsWhiteSpace($character)) {
+            if ($current.Length -gt 0) {
+                $result.Add($current.ToString())
+                [void]$current.Clear()
+            }
+        } else {
+            [void]$current.Append($character)
+        }
+    }
+    if ($current.Length -gt 0) {
+        $result.Add($current.ToString())
+    }
+    return $result.ToArray()
+}

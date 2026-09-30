@@ -34,7 +34,12 @@ public final class ConfigLoader {
                 throw new IOException("Configuration file does not exist: " + absoluteConfig);
             }
             baseDirectory = absoluteConfig.getParent();
-            Object parsed = JsonCodec.parse(Files.readString(absoluteConfig, StandardCharsets.UTF_8));
+            String content = Files.readString(absoluteConfig, StandardCharsets.UTF_8);
+            if (!content.isEmpty() && content.charAt(0) == '\uFEFF') {
+                // Windows editors frequently save JSON as UTF-8 with a BOM.
+                content = content.substring(1);
+            }
+            Object parsed = JsonCodec.parse(content);
             if (!(parsed instanceof Map<?, ?>)) {
                 throw new IOException("Configuration root must be a JSON object: " + absoluteConfig);
             }

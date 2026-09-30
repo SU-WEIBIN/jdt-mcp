@@ -44,6 +44,10 @@ if (-not (Test-Path -LiteralPath $jarFile -PathType Leaf)) {
 Write-Output "Maven build completed: $jarFile"
 
 if ($Run) {
-    & $javaSelection.Java '-jar' $jarFile @ProgramArguments
+    $jvmOptions = ConvertFrom-JvmOptions $env:JDT_MCP_JVM_OPTIONS
+    if ($jvmOptions.Count -gt 0) {
+        Write-Output "JVM options: $($jvmOptions -join ' ')"
+    }
+    & $javaSelection.Java @jvmOptions '-jar' $jarFile @ProgramArguments
     exit $LASTEXITCODE
 }

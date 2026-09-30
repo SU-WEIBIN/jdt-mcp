@@ -749,4 +749,8 @@ src/org/eclipse/jdt/mcp/app/
 
 The service writes structured JSONL request logs to `stderr` and persists them at `logs/jdt-mcp.jsonl` below each project cache directory. Logs include MCP method/tool, request ID, response duration, response size, JVM memory deltas, and resident-cache versus persisted-snapshot access.
 
-Use the `runtime_status` tool to inspect JVM memory, resident cache, filesystem capacity, and cumulative per-tool timings. See [`OBSERVABILITY.md`](OBSERVABILITY.md) for the field definitions and storage semantics.
+Startup and background indexing add `startup.phase`, `startup.summary`, `bytecode.index.artifact`, `maven.warnings` and `index.warning` events, so slow phases, the per-JAR indexing cost and memory peaks can be attributed from the same log. Each `startup.phase` record also carries process CPU time, CPU load and, on Linux, RSS.
+
+The launchers and `build.ps1 -Run` pass `JDT_MCP_JVM_OPTIONS` to the JVM, for example `-Xmx2g -XX:StartFlightRecording=filename=C:/tmp/jdt-mcp.jfr,settings=profile,dumponexit=true` for method-level profiling or `-XX:NativeMemoryTracking=summary` for native memory. When the MCP host spawns the process with its own environment, `JAVA_TOOL_OPTIONS` is honored as well.
+
+Use the `runtime_status` tool to inspect JVM memory, resident cache, filesystem capacity, process CPU/memory and cumulative per-tool timings. See [`OBSERVABILITY.md`](OBSERVABILITY.md) for the field definitions and storage semantics.

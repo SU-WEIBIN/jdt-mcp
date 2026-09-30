@@ -62,6 +62,33 @@ public final class ObservabilityTest extends TestCase {
         assertNotNull(info.get("disk"));
     }
 
+    /** 验证进程级 CPU/内存指标可转换为 JSON 兼容映射。 */
+    public void testProcessInfoIsJsonCompatible() {
+        Map<String, Object> info = RuntimeMonitor.processInfo().toInfo();
+        assertTrue(info.containsKey("processCpuTimeMillis"));
+        assertTrue(info.containsKey("processCpuLoad"));
+        assertTrue(info.containsKey("committedVirtualBytes"));
+        assertTrue(info.containsKey("residentSetBytes"));
+        assertTrue(info.containsKey("residentSetAvailable"));
+    }
+
+    /** 验证启动阶段计时器输出 startup.phase 和 startup.summary 事件。 */
+    public void testStartupProfilerEmitsPhaseAndSummary() {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (McpLogger logger = new McpLogger(output)) {
+            StartupProfiler profiler = new StartupProfiler(logger, null);
+            profiler.phase("test.phase", Map.of("items", 3));
+            profiler.finish();
+        }
+
+        String text = output.toString(StandardCharsets.UTF_8);
+        assertTrue(text.contains("\"event\":\"startup.phase\""));
+        assertTrue(text.contains("\"phase\":\"test.phase\""));
+        assertTrue(text.contains("\"items\":3"));
+        assertTrue(text.contains("\"event\":\"startup.summary\""));
+        assertTrue(text.contains("\"phaseCount\":1"));
+    }
+
     /**
      * 构造用于资源分类断言的快照。
      *

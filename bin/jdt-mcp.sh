@@ -50,7 +50,7 @@ if [ -z "$JAVA_PATH" ] || [ ! -x "$JAVA_PATH" ]; then
     exit 1
 fi
 
-JAVA_VERSION=$($JAVA_PATH -version 2>&1 | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p' | head -n 1)
+JAVA_VERSION=$("$JAVA_PATH" -version 2>&1 | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p' | head -n 1)
 case "$JAVA_VERSION" in
     ''|*[!0-9]*)
         write_diagnostic "Unable to determine Java version from $JAVA_PATH"
@@ -64,5 +64,12 @@ case "$JAVA_VERSION" in
         ;;
 esac
 
+JVM_OPTIONS=${JDT_MCP_JVM_OPTIONS:-}
+if [ -n "$JVM_OPTIONS" ]; then
+    write_diagnostic "JVM options: $JVM_OPTIONS"
+fi
 write_diagnostic "using Java $JAVA_VERSION at $JAVA_PATH"
-exec "$JAVA_PATH" -jar "$JAR_PATH" "$@"
+set -f
+# shellcheck disable=SC2086
+# JVM_OPTIONS is intentionally word-split; quote values that contain spaces.
+exec "$JAVA_PATH" $JVM_OPTIONS -jar "$JAR_PATH" "$@"

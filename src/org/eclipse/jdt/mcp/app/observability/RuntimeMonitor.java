@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,6 +21,8 @@ import org.eclipse.jdt.mcp.app.core.ProjectContext;
  */
 public final class RuntimeMonitor {
     private static final MemoryMXBean MEMORY = ManagementFactory.getMemoryMXBean();
+    private static final Path LINUX_STATM = Path.of("/proc/self/statm");
+    private static final long LINUX_PAGE_SIZE_BYTES = 4096L;
     private static final Set<String> BYTECODE_TOOLS = Set.of(
             "search_symbols", "get_class", "get_method", "inspect_jar",
             "find_project_usages", "find_callers", "find_callees", "trace_call_chain");
@@ -84,6 +87,65 @@ public final class RuntimeMonitor {
     }
 
     /**
+     * Captures operating-system process metrics that {@link MemoryMXBean} does
+     * not expose: cumulative process CPU time, recent process CPU load,
+     * committed virtual memory and, when the platform provides it, the
+     * resident set size. Unsupported values are reported as {@code -1}.
+     *
+     * @return process metrics snapshot
+     */
+    public static ProcessInfo processInfo() {
+        long cpuTimeNanos = -1L;
+        double cpuLoad = -1.0d;
+        long committedVirtualBytes = -1L;
+        if (ManagementFactory.getOperatingSystemMXBean()
+                instanceof com.sun.management.OperatingSystemMXBean extended) {
+            try {
+                cpuTimeNanos = extended.getProcessCpuTime();
+            } catch (RuntimeException ignored) {
+                cpuTimeNanos = -1L;
+            }
+            try {
+                cpuLoad = extended.getProcessCpuLoad();
+            } catch (RuntimeException ignored) {
+                cpuLoad = -1.0d;
+            }
+            try {
+                committedVirtualBytes = extended.getCommittedVirtualMemorySize();
+            } catch (RuntimeException ignored) {
+                committedVirtualBytes = -1L;
+            }
+        }
+        return new ProcessInfo(
+                cpuTimeNanos < 0L ? -1L : cpuTimeNanos,
+                cpuLoad,
+                committedVirtualBytes < 0L ? -1L : committedVirtualBytes,
+                residentSetBytes());
+    }
+
+    /**
+     * Reads the resident set size from {@code /proc/self/statm} on platforms
+     * that expose it. The value assumes 4 KiB pages, which matches mainstream
+     * Linux configurations.
+     *
+     * @return resident set size in bytes, or {@code -1} when unavailable
+     */
+    private static long residentSetBytes() {
+        if (!Files.isReadable(LINUX_STATM)) {
+            return -1L;
+        }
+        try {
+            String[] fields = Files.readString(LINUX_STATM, StandardCharsets.US_ASCII).trim().split("\\s+");
+            if (fields.length < 2) {
+                return -1L;
+            }
+            return Math.multiplyExact(Long.parseLong(fields[1]), LINUX_PAGE_SIZE_BYTES);
+        } catch (IOException | NumberFormatException | ArithmeticException exception) {
+            return -1L;
+        }
+    }
+
+    /**
      * Builds the response for the runtime_status tool.
      *
      * @param project project context
@@ -102,6 +164,7 @@ public final class RuntimeMonitor {
             paths.put("mavenLocalRepository", project.config().mavenLocalRepository().toString());
         }
         result.put("paths", paths);
+        result.put("process", processInfo().toInfo());
         result.put("metrics", metrics == null ? Map.of() : metrics.snapshot());
         result.put("storageSemantics", Map.of(
                 "memory", "resident bytecode snapshots and the project source index",
@@ -271,6 +334,30 @@ public final class RuntimeMonitor {
                 diskInfo.put(entry.getKey(), entry.getValue().toInfo());
             }
             result.put("disk", diskInfo);
+            return result;
+        }
+    }
+
+    /** Operating-system process metrics that need no native dependency. */
+    public record ProcessInfo(
+            long processCpuTimeNanos,
+            double processCpuLoad,
+            long committedVirtualBytes,
+            long residentSetBytes) {
+
+        /**
+         * Converts the process metrics to a JSON-compatible map.
+         *
+         * @return process metric map
+         */
+        public Map<String, Object> toInfo() {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("processCpuTimeMillis", processCpuTimeNanos < 0L
+                    ? -1.0d : processCpuTimeNanos / 1_000_000.0d);
+            result.put("processCpuLoad", processCpuLoad);
+            result.put("committedVirtualBytes", committedVirtualBytes);
+            result.put("residentSetBytes", residentSetBytes);
+            result.put("residentSetAvailable", residentSetBytes >= 0L);
             return result;
         }
     }

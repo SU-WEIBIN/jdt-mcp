@@ -85,6 +85,39 @@ function Write-Diagnostic {
     [Console]::Error.WriteLine("[jdt-mcp] $Message")
 }
 
+function ConvertFrom-JvmOptions {
+    param([string]$Options)
+
+    $result = New-Object System.Collections.Generic.List[string]
+    if ([string]::IsNullOrWhiteSpace($Options)) {
+        return $result.ToArray()
+    }
+    $current = New-Object System.Text.StringBuilder
+    $quote = [char]0
+    foreach ($character in $Options.ToCharArray()) {
+        if ($quote -ne [char]0) {
+            if ($character -eq $quote) {
+                $quote = [char]0
+            } else {
+                [void]$current.Append($character)
+            }
+        } elseif ($character -eq '"' -or $character -eq "'") {
+            $quote = $character
+        } elseif ([char]::IsWhiteSpace($character)) {
+            if ($current.Length -gt 0) {
+                $result.Add($current.ToString())
+                [void]$current.Clear()
+            }
+        } else {
+            [void]$current.Append($character)
+        }
+    }
+    if ($current.Length -gt 0) {
+        $result.Add($current.ToString())
+    }
+    return $result.ToArray()
+}
+
 $jarCandidates = @(
     (Join-Path (Join-Path $packageRoot 'lib') 'jdt-mcp.jar'),
     (Join-Path (Join-Path $packageRoot 'target') 'jdt-mcp.jar'),
@@ -118,8 +151,12 @@ if ($null -eq $javaSelection) {
     exit 1
 }
 
+$jvmOptions = ConvertFrom-JvmOptions $env:JDT_MCP_JVM_OPTIONS
+if ($jvmOptions.Count -gt 0) {
+    Write-Diagnostic "JVM options: $($jvmOptions -join ' ')"
+}
 Write-Diagnostic "using Java $($javaSelection.Version) at $($javaSelection.Java)"
 $ErrorActionPreference = 'Continue'
-& $javaSelection.Java '-jar' $jarPath @ProgramArguments
+& $javaSelection.Java @jvmOptions '-jar' $jarPath @ProgramArguments
 $exitCode = $LASTEXITCODE
 exit $exitCode
